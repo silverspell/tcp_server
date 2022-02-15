@@ -1,63 +1,16 @@
 package tcp_server
 
 import (
-	"bufio"
-	"crypto/tls"
 	"log"
 	"net"
 )
 
-// Client holds info about connection
-type Client struct {
-	conn   net.Conn
-	Server *server
-}
-
 // TCP server
 type server struct {
 	address                  string // Address to open connection: localhost:9999
-	config                   *tls.Config
 	onNewClientCallback      func(c *Client)
 	onClientConnectionClosed func(c *Client, err error)
 	onNewMessage             func(c *Client, message string)
-}
-
-// Read client data from channel
-func (c *Client) listen() {
-	c.Server.onNewClientCallback(c)
-	reader := bufio.NewReader(c.conn)
-	for {
-		message, err := reader.ReadString('\n')
-		if err != nil {
-			c.conn.Close()
-			c.Server.onClientConnectionClosed(c, err)
-			return
-		}
-		c.Server.onNewMessage(c, message)
-	}
-}
-
-// Send text message to client
-func (c *Client) Send(message string) error {
-	return c.SendBytes([]byte(message))
-}
-
-// Send bytes to client
-func (c *Client) SendBytes(b []byte) error {
-	_, err := c.conn.Write(b)
-	if err != nil {
-		c.conn.Close()
-		c.Server.onClientConnectionClosed(c, err)
-	}
-	return err
-}
-
-func (c *Client) Conn() net.Conn {
-	return c.conn
-}
-
-func (c *Client) Close() error {
-	return c.conn.Close()
 }
 
 // Called right after server starts listening new client
@@ -79,11 +32,8 @@ func (s *server) OnNewMessage(callback func(c *Client, message string)) {
 func (s *server) Listen() {
 	var listener net.Listener
 	var err error
-	if s.config == nil {
-		listener, err = net.Listen("tcp", s.address)
-	} else {
-		listener, err = tls.Listen("tcp", s.address, s.config)
-	}
+	listener, err = net.Listen("tcp", s.address)
+
 	if err != nil {
 		log.Fatal("Error starting TCP server.\r\n", err)
 	}
@@ -110,18 +60,5 @@ func New(address string) *server {
 	server.OnNewMessage(func(c *Client, message string) {})
 	server.OnClientConnectionClosed(func(c *Client, err error) {})
 
-	return server
-}
-
-func NewWithTLS(address, certFile, keyFile string) *server {
-	cert, err := tls.LoadX509KeyPair(certFile, keyFile)
-	if err != nil {
-		log.Fatal("Error loading certificate files. Unable to create TCP server with TLS functionality.\r\n", err)
-	}
-	config := &tls.Config{
-		Certificates: []tls.Certificate{cert},
-	}
-	server := New(address)
-	server.config = config
 	return server
 }
