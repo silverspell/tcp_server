@@ -1,6 +1,7 @@
 package tcp_server
 
 import (
+	"fmt"
 	"os"
 	"strconv"
 	"time"
@@ -8,9 +9,21 @@ import (
 
 type Hub struct {
 	Clients map[string]*Client
+	cleaner time.Timer
 }
 
-func clearConnections(hub *Hub) {
+func NewHub() *Hub {
+	h := &Hub{
+		Clients: map[string]*Client{},
+		cleaner: *time.NewTimer(1 * time.Minute),
+	}
+	go h.clearConnections()
+	return h
+}
+
+func (hub *Hub) clearConnections() {
+	<-hub.cleaner.C
+	fmt.Println("Starting cleaner")
 	var maxTimeDiffBetweenMessages int64
 
 	envValue, ok := os.LookupEnv("MAX_TIME_DIFF_BETWEEN_MESSAGES")
@@ -23,6 +36,10 @@ func clearConnections(hub *Hub) {
 		if now-client.lastSeen >= maxTimeDiffBetweenMessages {
 			client.conn.Close()
 			delete(hub.Clients, key)
+			fmt.Printf("%s disconnected\n", key)
 		}
 	}
+	hub.cleaner.Reset(1 * time.Minute)
+	fmt.Println("Cleaner reset")
+	go hub.clearConnections()
 }
